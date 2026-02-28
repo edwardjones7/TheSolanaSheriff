@@ -1,2 +1,2 @@
-# TheSheriff
-HenHacks Hackathon Project:
+# The Sheriff
+HenHacks Hackathon Project
