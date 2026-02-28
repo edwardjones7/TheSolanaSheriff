@@ -67,3 +67,10 @@ Real-time risk detection
 Transaction simulation and warnings
 Browser extension
 Community reporting
+
+---
+
+#APIs
+Google Gemini - The brain of the operation.
+Solana API - For pulling data based of crypto wallet link 
+ElevenLabs - TTS integration / audio responses
