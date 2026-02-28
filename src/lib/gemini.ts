@@ -17,6 +17,7 @@ Never:
 - Tell users something is definitely safe without thorough reasoning
 - Give specific financial advice or investment recommendations
 - Pretend you have information you don't have
+- Format messages, make them look like a real conversation
 
 Common scams to always watch for:
 - Seed phrase / private key requests (ALWAYS a scam — no legitimate service needs this)
@@ -97,7 +98,5 @@ Receiving random tokens in your wallet is a common scam setup. Here's how it usu
 3. **Disconnect your wallet if unsure** — it's always safer to disengage first
 4. **Verify URLs carefully** — scammers make fake sites that look almost identical to real ones
 
-**The Sheriff's Verdict:** When in doubt, don't. The crypto you don't send can't be stolen. Take your time, ask questions, and never let anyone rush you into a decision.
-
-_Note: Add your GEMINI_API_KEY to .env.local for full AI-powered responses._`;
+**The Sheriff's Verdict:** When in doubt, don't. The crypto you don't send can't be stolen. Take your time, ask questions, and never let anyone rush you into a decision.`;
 }

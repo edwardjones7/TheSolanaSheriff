@@ -13,18 +13,41 @@ const EXAMPLE_PROMPTS = [
 ];
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = sessionStorage.getItem("sheriff-chat");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const shouldScrollRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    requestAnimationFrame(() => window.scrollTo(0, 0));
+  }, []);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("sheriff-chat", JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
+
+  useEffect(() => {
+    if (shouldScrollRef.current) {
+      scrollToBottom();
+      shouldScrollRef.current = false;
+    }
   }, [messages]);
 
   const sendMessage = async (content: string) => {
@@ -35,6 +58,7 @@ export default function ChatPage() {
       ...messages,
       { role: "user", content: trimmed },
     ];
+    shouldScrollRef.current = true;
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
@@ -100,7 +124,10 @@ export default function ChatPage() {
     <div className="flex flex-col h-[calc(100vh-4rem)]">
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto"
+      >
         <div className="container mx-auto max-w-3xl px-4 py-6 space-y-5">
           {/* Welcome state */}
           {messages.length === 0 && (
