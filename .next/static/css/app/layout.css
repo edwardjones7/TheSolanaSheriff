@@ -723,9 +723,6 @@ video {
 .mt-12 {
   margin-top: 3rem;
 }
-.mt-16 {
-  margin-top: 4rem;
-}
 .mt-4 {
   margin-top: 1rem;
 }
@@ -892,9 +889,6 @@ video {
 .gap-1\.5 {
   gap: 0.375rem;
 }
-.gap-12 {
-  gap: 3rem;
-}
 .gap-2 {
   gap: 0.5rem;
 }
@@ -1050,9 +1044,6 @@ video {
 .bg-stone-800\/30 {
   background-color: rgb(41 37 36 / 0.3);
 }
-.bg-stone-800\/40 {
-  background-color: rgb(41 37 36 / 0.4);
-}
 .bg-stone-800\/60 {
   background-color: rgb(41 37 36 / 0.6);
 }
@@ -1085,9 +1076,6 @@ video {
 }
 .fill-amber-500 {
   fill: #f59e0b;
-}
-.p-2 {
-  padding: 0.5rem;
 }
 .p-2\.5 {
   padding: 0.625rem;
