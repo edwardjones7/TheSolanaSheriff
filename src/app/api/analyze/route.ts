@@ -6,14 +6,37 @@ import {
   buildRiskEvidence,
 } from "@/lib/helius";
 import { scoreRisk } from "@/lib/risk-scorer";
+import { assessWalletRiskWithGemini } from "@/lib/gemini";
 import { isValidSolanaAddress } from "@/lib/utils";
+import { AiAssessment, RiskEvidence } from "@/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function getDeterministicDemoBalance(address: string): number {
   const seed = address.charCodeAt(0) + address.charCodeAt(address.length - 1);
   return Number(((seed % 300) / 10).toFixed(4));
+}
+
+async function tryGeminiAssessment(
+  evidence: RiskEvidence,
+  mode: "analyze" | "recipient"
+): Promise<{ ai?: AiAssessment; aiError?: string }> {
+  if (!process.env.GEMINI_API_KEY) {
+    return {};
+  }
+  try {
+    const ai = await assessWalletRiskWithGemini(evidence, mode);
+    return { ai };
+  } catch (error) {
+    console.error("Gemini wallet risk assessment failed:", error);
+    return {
+      aiError:
+        error instanceof Error
+          ? error.message
+          : "AI assessment unavailable — using heuristic analysis.",
+    };
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -23,7 +46,6 @@ export async function POST(req: NextRequest) {
     mode: "analyze" | "recipient";
   };
 
-  // Validate input
   if (!address || typeof address !== "string") {
     return NextResponse.json(
       { error: "Wallet address is required" },
@@ -46,6 +68,8 @@ export async function POST(req: NextRequest) {
     const solBalance = getDeterministicDemoBalance(address);
     const riskEvidence = buildRiskEvidence(address, mockData);
 
+    const { ai, aiError } = await tryGeminiAssessment(riskEvidence, resolvedMode);
+
     const demoFindings = [
       "⚠ Demo mode — connect a Helius API key for real on-chain data",
       ...result.findings,
@@ -56,6 +80,8 @@ export async function POST(req: NextRequest) {
       solBalance,
       findings: demoFindings,
       riskEvidence,
+      ai,
+      aiError,
     });
   }
 
@@ -66,7 +92,16 @@ export async function POST(req: NextRequest) {
     ]);
     const result = scoreRisk(walletData, resolvedMode);
     const riskEvidence = buildRiskEvidence(address, walletData);
-    return NextResponse.json({ ...result, solBalance, riskEvidence });
+
+    const { ai, aiError } = await tryGeminiAssessment(riskEvidence, resolvedMode);
+
+    return NextResponse.json({
+      ...result,
+      solBalance,
+      riskEvidence,
+      ai,
+      aiError,
+    });
   } catch (error) {
     console.error("Helius API error:", error);
     const message =

@@ -3,6 +3,14 @@ export interface Message {
   content: string;
 }
 
+export interface AiAssessment {
+  riskLevel: "low" | "medium" | "high";
+  advice: string;
+  keyReasons: string[];
+  confidence: number;
+  model: string;
+}
+
 export interface AnalysisResult {
   riskLevel: "low" | "medium" | "high";
   score: number;
@@ -10,6 +18,8 @@ export interface AnalysisResult {
   advice: string;
   solBalance?: number;
   riskEvidence?: RiskEvidence;
+  ai?: AiAssessment;
+  aiError?: string;
 }
 
 export interface WalletDataCoverage {
