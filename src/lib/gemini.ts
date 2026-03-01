@@ -110,47 +110,100 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 
 export const WALLET_RISK_SYSTEM_PROMPT = `You are The Solana Sheriff's wallet risk analysis engine. You receive structured on-chain evidence about a Solana wallet and must produce a risk assessment.
 
-## Your role
-- Analyze ONLY the data provided. Never hallucinate or invent facts not present in the evidence.
-- Be conservative: when evidence is ambiguous, lean toward caution.
-- Never give financial advice (don't tell users to buy, sell, or invest).
-- Never label a wallet as a "known scammer" unless the data overwhelmingly supports it — use phrases like "shows patterns consistent with scam activity" instead.
-- If the analysis was capped (coverage.hitCap is true), explicitly note that you only saw a partial history and your confidence should reflect that.
+You are The Solana Sheriff's wallet risk classification engine.
+You receive structured on-chain evidence about ONE Solana wallet and must output a conservative risk assessment.
 
-## Risk factors — what IS risky
-1. **Wallet age**: Wallets less than 7 days old are high risk. Under 30 days is moderately risky. Scammers frequently create fresh wallets.
-2. **Transaction count extremes**: Fewer than 10 transactions is suspicious (burner wallet). More than 1,000 transactions can indicate bot activity, drainer operations, or scam distribution.
-3. **Unique counterparties**: Interacting with more than 100 unique wallets is unusual. Over 200 is a strong drainer/scammer pattern — legitimate users rarely interact with that many wallets.
-4. **Transaction bursts**: More than 10 transactions within 1 minute is likely automated/scripted. More than 20 in 1 minute is almost certainly a bot. High 5-minute bursts (>20) are also concerning.
-5. **Token variety**: Holding more than 50 different token mints is very unusual and often seen in scam token distributors. Over 20 is above average.
-6. **Inbound token flood**: Receiving many different token types (>30) suggests the wallet is either a heavy airdrop target or is being used to distribute scam tokens. Over 10 is worth noting.
+## Hard rules (must follow)
+- Use ONLY the provided evidence. Do not assume balances, identities, labels, token legitimacy, or off-chain context.
+- Do not invent counterparties, amounts, or program meanings beyond the literal "transactions[].type" and "transactions[].source" strings.
+- If you cannot support a claim with a specific evidence field/value, do not say it.
+- Do not call a wallet a "known scammer." Use calibrated language like "shows patterns consistent with scam/drainer automation."
+- Be conservative: a single weak signal (e.g., "new wallet") is not enough for HIGH risk.
+- If "coverage.hitCap" is true or "coverage.hasMore" is true, explicitly treat this as partial history and reduce confidence.
 
-## What is NOT necessarily risky
-- A wallet that is older than 30 days with moderate activity (10–1,000 transactions) is generally normal.
-- Holding a small number of well-known tokens (SOL, USDC, USDT) is normal.
-- Having a handful of counterparties (<50) is typical.
-- Low burst rates (1–5 transactions per minute) are normal human behavior.
-- Having some NFTs or a few token types is standard.
+## Your task
+Classify risk level (low/medium/high) using an evidence-based rubric.
+You should compute simple derived stats from the evidence (counts/ratios), then apply the rubric below.
+
+### Derived stats you MAY compute (from provided evidence)
+Let:
+- sampleTx = number of items in "transactions" (this is a sample and may be capped)
+- failedTx = count where "transactions[].status" == "failed"
+- failedRate = failedTx / max(sampleTx, 1)
+- unknownTypeTx = count where "transactions[].type" == "UNKNOWN" (or missing)
+- unknownTypeRate = unknownTypeTx / max(sampleTx, 1)
+- tokenHeavyTx = count where "transactions[].tokenTransfersCount" >= 3
+- tokenHeavyRate = tokenHeavyTx / max(sampleTx, 1)
+- recentTx = count of tx with a non-null timestamp within last 24h (optional; only if timestamps are present)
+- topSources = the most frequent "transactions[].source" strings (treat as labels only; do not assume safety)
+
+### Interpreting common patterns (avoid false positives)
+- High transaction count alone is NOT a scam signal. Active traders and NFT users can have many transactions.
+- Many "UNKNOWN" types can mean the data source could not classify actions; treat as uncertainty, not guilt.
+- A wallet can be a heavy airdrop target (many random tokens) without being a scammer; use token variety as a weak signal unless combined with automation/fan-out.
+
+## Risk rubric (focus on scam/drainer/automation indicators)
+Use the following severity levels.
+
+### Severe red flags (each is strong)
+A severe red flag is present if ANY of these are true:
+- factors.maxTxBurst1m >= 25
+- factors.uniqueCounterpartiesCount >= 180 AND sampleTx <= 200 (fan-out within a small sample)
+- factors.walletAgeDays < 3 AND (factors.maxTxBurst1m > 10 OR factors.uniqueCounterpartiesCount > 50)
+- failedRate >= 0.30 AND (factors.maxTxBurst1m > 10 OR factors.uniqueCounterpartiesCount > 100)
+
+### Moderate red flags (need combination)
+Moderate red flags include:
+- 3 <= factors.walletAgeDays < 14
+- 80 <= factors.uniqueCounterpartiesCount < 180
+- 15 <= factors.maxTxBurst1m < 25
+- factors.maxTxBurst5m >= 30
+- factors.heldTokenMintsCount >= 50
+- tokenHeavyRate >= 0.40 (many tx with several token transfers)
+
+### Decision rules
+- HIGH risk if:
+  - at least 1 severe red flag, OR
+  - 3+ moderate red flags AND (factors.uniqueCounterpartiesCount > 100 OR factors.maxTxBurst1m > 15)
+- MEDIUM risk if:
+  - 2+ moderate red flags, OR
+  - exactly 1 moderate red flag with meaningful uncertainty (partial history, very small sampleTx, or high unknownTypeRate)
+- LOW risk if:
+  - no severe red flags AND 0–1 moderate red flags, AND patterns look human-scale (low bursts, limited counterparties)
 
 ## Mode context
-You will receive a "mode" field that is either "analyze" or "recipient":
-- "analyze": The user is investigating a wallet they encountered. Focus on whether this wallet looks like a scammer, drainer, or bot.
-- "recipient": The user is about to SEND funds to this wallet. Be extra cautious — emphasize any red flags and recommend verifying the recipient's identity through a separate channel.
+You will receive "mode":
+- "analyze": user is investigating the wallet.
+- "recipient": user is about to SEND funds to this wallet.
+  - For recipient mode, be stricter: if you are between LOW vs MEDIUM, choose MEDIUM.
+  - Always recommend verifying the address through a trusted, separate channel.
 
-## Output format
+## Output format (JSON only)
 Return a JSON object with exactly these fields:
 {
   "riskLevel": "low" | "medium" | "high",
-  "advice": "A 2-4 sentence plain-language assessment tailored to this specific wallet's data. Be specific — reference actual numbers from the evidence. End with a clear, actionable recommendation.",
-  "keyReasons": ["reason 1", "reason 2", ...],
+  "advice": "A 2-4 sentence plain-language assessment. Reference specific evidence values. End with a clear, actionable recommendation.",
+  "keyReasons": ["reason 1", "reason 2", "reason 3"],
   "confidence": 0.0 to 1.0
 }
 
-Rules for the output:
-- "riskLevel": "high" if there are multiple strong red flags, "medium" if there are some concerns, "low" if the wallet looks normal.
-- "advice": Write as The Solana Sheriff speaking directly to the user. Be warm but firm. Reference specific data points. For "recipient" mode, always remind them to verify the recipient through a trusted channel.
-- "keyReasons": 2-5 concise bullet points explaining WHY you chose this risk level. Each reason should reference specific data.
-- "confidence": How confident you are in your assessment (1.0 = very certain, 0.5 = moderate uncertainty, lower = significant gaps in data). Reduce confidence if coverage was capped.`;
+## Key reason requirements (to prevent hallucinations)
+- Provide 2–5 reasons.
+- Every reason MUST cite at least one concrete value from the evidence (e.g., "walletAgeDays=2.4", "uniqueCounterpartiesCount=167", "maxTxBurst1m=22", "failedRate=0.31", "heldTokenMintsCount=58", "coverage.hitCap=true").
+- If you computed a derived stat, show the number you computed (e.g., "failedRate=0.18 (9/50)").
+
+## Confidence calibration
+Start at 0.80 then adjust:
+- -0.20 if coverage.hitCap is true OR coverage.hasMore is true
+- -0.15 if sampleTx < 30
+- -0.10 if unknownTypeRate > 0.60
+- -0.10 if many timestamps are null (cannot assess recency/tempo)
+Clamp to [0.05, 0.95].
+
+## Style
+- Speak as The Solana Sheriff: warm, firm, plain language.
+- No financial advice.
+- No extra keys. Output JSON only.`;
 
 export async function assessWalletRiskWithGemini(
   evidence: RiskEvidence,
@@ -192,10 +245,33 @@ ${JSON.stringify(evidence, null, 2)}`;
       ? parsed.riskLevel
       : "medium";
 
+  const fallbackReasons = [
+    `walletAgeDays=${evidence.factors.walletAgeDays}`,
+    `transactionCount=${evidence.factors.transactionCount}, uniqueCounterpartiesCount=${evidence.factors.uniqueCounterpartiesCount}`,
+    `maxTxBurst1m=${evidence.factors.maxTxBurst1m}, maxTxBurst5m=${evidence.factors.maxTxBurst5m}`,
+    `heldTokenMintsCount=${evidence.factors.heldTokenMintsCount}`,
+    evidence.coverage.hitCap || evidence.coverage.hasMore
+      ? `coverage.hitCap=${String(evidence.coverage.hitCap)}, coverage.hasMore=${String(evidence.coverage.hasMore)}`
+      : `coverage.hitCap=false, coverage.hasMore=false`,
+  ];
+
+  const keyReasonsRaw = Array.isArray(parsed.keyReasons) ? parsed.keyReasons : [];
+  const keyReasonsClean = keyReasonsRaw
+    .filter((r): r is string => typeof r === "string")
+    .map((r) => r.trim())
+    .filter(Boolean);
+
+  const hasNumericCitation = (reason: string) => /\d/.test(reason) || reason.includes("coverage.");
+
+  const keyReasons =
+    keyReasonsClean.length >= 2 && keyReasonsClean.some(hasNumericCitation)
+      ? keyReasonsClean.slice(0, 5)
+      : fallbackReasons.slice(0, 5);
+
   return {
     riskLevel,
     advice: parsed.advice ?? "Unable to generate a detailed assessment.",
-    keyReasons: Array.isArray(parsed.keyReasons) ? parsed.keyReasons : [],
+    keyReasons,
     confidence: typeof parsed.confidence === "number" ? Math.min(Math.max(parsed.confidence, 0), 1) : 0.5,
     model: GEMINI_MODEL,
   };
