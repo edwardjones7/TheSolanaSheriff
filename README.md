@@ -1,3 +1,8 @@
+# HenHacks 2026 Security Submission
+The Solana Sheriff a tool use to mitigate a multi-billion dollar fraud industry.
+
+[Link](https://devpost.com/software/the-solana-sheriff?ref_content=my-projects-tab&ref_feature=my_projects)
+
 # The Solana Sheriff (Developer Docs)
 
 These docs explain what **The Solana Sheriff** is, how it works end-to-end, and where to find the main pieces of the system in the codebase.
